@@ -47,7 +47,7 @@ def parse_vcfs(vcfs, ins=False):
         # compute END for ALU-insertion,LINE1-insertion,SVA-insertion SVTYPE rows
         no_end_svtypes = (df['variants/SVTYPE'] == "ALU") | (df['variants/SVTYPE'] == "LINE1") | (df['variants/SVTYPE'] == "SVA") | (df['variants/SVTYPE'] == "INS")
         if len(df.loc[no_end_svtypes, :]) != 0:
-            df.loc[no_end_svtypes, ['variants/END']] = df['variants/POS']
+            df.loc[no_end_svtypes, ['variants/END']] = df['variants/POS'] + 1
 
         # workaround for START > END so BedTool doesn't freak out with MalformedBedError
         # START > END is the case for TRV, INV, DEL
@@ -73,24 +73,25 @@ def parse_vcfs(vcfs, ins=False):
     ann_df = ann_df[["CHROM", "POS", "END", "ALT", "SVTYPE", "SAMPLE"]]
 
     if ins:
-        ann_df = ann_df[ann_df['SVTYPE'].str.contains('INS')]
+        ann_df = ann_df[ann_df['ALT'].str.contains('INS')]
     else:
         ann_df = ann_df[ann_df['SVTYPE'].str.contains('DEL|DUP|INV')]
         ann_df = ann_df.drop(columns=['ALT'])
 
     return BedTool(list(ann_df.itertuples(index=False, name=None)))
 
-def group_sv(bedtool, reciprocal_overlap, ins=False):
+def group_sv(bedtool, reciprocal_overlap, ins):
 
     print('Identifying equivalent structural variant calls using a reciprocal overlap of %f' % reciprocal_overlap)
     already_grouped_intervals = set()
-    columns = ['CHROM', 'POS', 'END', 'SVTYPE', 'N_SAMPLES']
+    columns = ['CHROM', 'POS', 'END', 'SVTYPE', 'N_SAMPLES'] if not ins else ['CHROM', 'POS', 'END', 'ALT', 'N_SAMPLES']
     columns.extend(sample_list)
     columns.extend(["%s_SV_DETAILS" % s for s in sample_list])
 
-    master_df = pd.DataFrame(columns=columns).set_index(['CHROM', 'POS', 'END', 'SVTYPE'])
 
-    if not ins:
+    print(ins)
+    if ins == False:
+        master_df = pd.DataFrame(columns=columns).set_index(['CHROM', 'POS', 'END', 'SVTYPE'])
         #for DEL, DUP, INV, compare with bedtools intersect reciprocal overlap
         for l in bedtool.intersect(bedtool, wa=True, wb=True, F=reciprocal_overlap, f=reciprocal_overlap):
 
@@ -104,6 +105,7 @@ def group_sv(bedtool, reciprocal_overlap, ins=False):
                 already_grouped_intervals.add(samp_interval)
 
     else:
+        master_df = pd.DataFrame(columns=columns).set_index(['CHROM', 'POS', 'END', 'ALT'])
         for l in bedtool.window(bedtool, w=200):
 
             ref_chr, ref_start, ref_end, ref_alt, ref_svtype, ref_name, \
@@ -152,7 +154,7 @@ if __name__ == "__main__":
     vcfs = args.i
     sample_list = []
     del_dup_inv = parse_vcfs(vcfs)
-    del_dup_inv_df = group_sv(del_dup_inv, args.r_overlap)
+    del_dup_inv_df = group_sv(del_dup_inv, args.r_overlap, ins=False)
     del_dup_inv_df.to_csv('%s_DEL_DUP_INV.tsv'%args.o, sep="\t")
 
     sample_list = []

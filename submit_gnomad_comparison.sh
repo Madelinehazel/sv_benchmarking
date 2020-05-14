@@ -16,7 +16,7 @@
 
 ####################################################################################################
 
-samples=(HG00512  HG00513)
+samples=(HG00512  HG00513  HG00514  HG00731  HG00732  HG00733  NA19238  NA19239 NA19240)
 ref_vcf_path=$1
 tools=$2
 tool_vcf_paths="$(echo $3 | tr ',' ' ')"
@@ -31,10 +31,18 @@ fi
 
 
 for i in ${samples[@]}; do
+    echo $i
     ref_vcf=$ref_vcf_path/nstd152.GRCh37.variant_call.$i.reformat.vcf
 
     #make array of paths to output vcfs for this particular sample
-    declare -a sample_vcfs
+    if [ $i == HG00512 ]
+    then
+        declare -a sample_vcfs
+    else
+        sample_vcfs=()
+    fi
+
+    echo $sample_vcfs
     for tool in ${tool_vcf_paths[@]}; do
       vcf="$(echo ${tool}${i}*)"
       sample_vcfs+=( $vcf )
@@ -42,16 +50,15 @@ for i in ${samples[@]}; do
 
     sample_vcfs="$(echo "${sample_vcfs[@]}")"
     #make overlap script for each sample
-    echo -e "source activate /hpf/largeprojects/ccmbio/mcouse/SV_comparison/envs \
-    \npython /hpf/largeprojects/ccmbio/mcouse/SV_comparison/scripts/wrapper_script/sv_benchmarking/benchmark/compare_sv_vcfs.py \
+    echo -e "\npython /hpf/largeprojects/ccmbio/mcouse/SV_comparison/scripts/wrapper_script/sv_benchmarking/benchmark/compare_sv_vcfs.py \
     -i $ref_vcf $sample_vcfs \
     -r_overlap 0.5 -o ${output_path}/${i}_gnomad_overlap" > ${output_path}/gnomad_overlap_analysis.$i.sh
 
-    #qsub -l vmem=16g,mem=16g,walltime=12:00:00 \
-    #-N $i.gnomad.overlap \
-    #-o $i.gnomad.overlap.o \
-    #-e $i.gnomad.overlap.e \
-    #${output_path}/gnomad_overlap_analysis.$i.sh
+    qsub -l vmem=16g,mem=16g,walltime=4:00:00 \
+    -N $i.gnomad.overlap \
+    -o $i.gnomad.overlap.o \
+    -e $i.gnomad.overlap.e \
+    ${output_path}/gnomad_overlap_analysis.$i.sh
 
 done
 
